@@ -1,0 +1,30 @@
+openrouter:
+  base_url: https://openrouter.ai/api/v1
+  # api_key: ${OPENROUTER_API_KEY}
+  # the OPENROUTER_API_KEY env var overrides the value above if both are set
+
+api_keys: # local client keys (what clients like opencode/aider authenticate with)
+  - "sk-or-v1-secret"
+
+ladder: # cheapest → most expensive; keep it short (3-4 steps)
+  - id: google/gemini-2.5-flash-lite
+  - id: anthropic/claude-haiku-4.5
+  - id: anthropic/claude-sonnet-5
+  - id: anthropic/claude-opus-4.8
+
+classifier:
+  model: google/gemini-2.5-flash-lite # cheap + fast
+  # difficulty → starting index in the ladder
+  tiers: { trivial: 0, easy: 0, medium: 1, hard: 2, expert: 3 }
+
+judge:
+  model: google/gemini-2.5-flash-lite
+  threshold: 7 # 1-10
+  strict_threshold: 8 # used by "auto:strict"
+  cheap_threshold: 6 # used by "auto:cheap"
+  max_escalations: 3
+  cheap_max_escalations: 1 # used by "auto:cheap"
+
+pricing_refresh_hours: 24 # fetch prices from OpenRouter's GET /models
+request_timeout_seconds: 120
+db_path: ratatosk.sqlite3
