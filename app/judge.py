@@ -60,15 +60,19 @@ def last_user_task(messages: list[dict]) -> str:
 
 
 async def judge_answer(
-    client, config: Config, messages: list[dict], answer: str
+    client, config: Config, messages: list[dict], answer: str, model: str | None = None
 ) -> tuple[int | None, str, float]:
     """Returns (score, reason, cost_usd). score=None ⇒ judge down/unparseable
-    — caller should pass through the answer (fail open) and log warning."""
+    — caller should pass through the answer (fail open) and log warning.
+
+    `model` overrides the configured judge, which is how shadow audits re-score
+    an accepted answer with a stronger model."""
+    model = model or config.judge.model
     prompt = JUDGE_PROMPT.format(task=last_user_task(messages), answer=answer)
     try:
         response = await client.chat_completion(
             {
-                "model": config.judge.model,
+                "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0,
                 "max_tokens": 200,
@@ -78,7 +82,7 @@ async def judge_answer(
         logger.warning("Judge call failed — passing through response", exc_info=True)
         return None, "judge unavailable", 0.0
 
-    price_in, price_out = await client.price_for(config.judge.model)
+    price_in, price_out = await client.price_for(model)
     cost = attempt_cost(response.get("usage"), price_in, price_out)
 
     text = content_to_text(response["choices"][0]["message"].get("content"))

@@ -14,7 +14,9 @@ ladder: # cheapest → most expensive; keep it short (3-4 steps)
 
 classifier:
   model: google/gemini-2.5-flash-lite # cheap + fast
-  # difficulty → starting index in the ladder
+  # difficulty → starting index in the ladder.
+  # Used as the prior; `learning` overrides it per (task_type, difficulty)
+  # once a cell has enough judged attempts to decide for itself.
   tiers: { trivial: 0, easy: 0, medium: 1, hard: 2, expert: 3 }
 
 judge:
@@ -24,6 +26,61 @@ judge:
   cheap_threshold: 6 # used by "auto:cheap"
   max_escalations: 3
   cheap_max_escalations: 1 # used by "auto:cheap"
+
+learning: # learn start rungs from the request log (GET /learn)
+  enabled: true
+  policy: expected_cost # or: pass_rate
+  min_samples: 20 # judged attempts a cell needs before it overrides `tiers`
+  min_pass_rate: 0.8 # only used by the "pass_rate" policy
+  lookback_days: 30
+  refresh_minutes: 60
+
+exploration: # epsilon-greedy: occasionally start one rung lower to keep data fresh
+  enabled: true
+  epsilon: 0.10 # also how fast the local model gathers evidence to deploy
+
+verifiers: # free deterministic checks (python/json syntax, arithmetic)
+  enabled: true
+  enforce: true # a hard failure forces escalation even if the judge was happy
+
+audit: # shadow audits: re-judge a sample with a strong model to catch false accepts
+  enabled: false
+  # model: anthropic/claude-opus-4.8   # defaults to the top ladder rung
+  sample_pct: 0.02
+
+feedback: # ground truth from clients (POST /v1/feedback) and follow-up turns
+  enabled: true
+  implicit: true # infer a negative when the next turn reads as "that's wrong"
+  max_regret_chars: 200
+
+embeddings: # nearest-neighbour routing + semantic cache; adds an embedding call per request
+  enabled: false
+  # base_url and api_key default to the openrouter section above, which serves
+  # embeddings. Override them to use OpenAI or a local server instead:
+  # base_url: https://api.openai.com/v1
+  # api_key: sk-...
+  model: openai/text-embedding-3-small
+  dimensions: 256
+  neighbors: 10
+  min_similarity: 0.75
+  min_neighbors: 5
+  max_vectors: 2000
+  refresh_minutes: 60
+  cache_enabled: false # reuse the answer from a near-identical prompt
+  cache_similarity: 0.97
+
+predictor: # small local model that learns which rung each prompt needs (python -m app.train)
+  enabled: true # route with it once a training run proves it beats the router without it
+  path: router_model.json
+  log_features: true # store hashed prompt features (never the text) as training data
+  buckets: 8192 # hashed n-gram slots; changing this needs a retrain
+  policy: expected_cost # or: pass_rate
+  min_pass_prob: 0.8 # only used by the "pass_rate" policy
+  min_examples: 200 # training refuses to run on fewer requests
+  holdout: 0.2 # newest fraction of the log used to evaluate, never to train
+  lookback_days: 90
+
+log_prompts: false # store prompt text in the log (off: only length)
 
 pricing_refresh_hours: 24 # fetch prices from OpenRouter's GET /models
 request_timeout_seconds: 120
